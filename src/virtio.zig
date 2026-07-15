@@ -284,8 +284,8 @@ test "virtio comp" {
     try testing.expectEqual(0x74726976, Virtio.MAGIC_VAL);
 }
 
-// The probe reads return their exact constants — a wrong value is what triggers xv6's "could not
-// find virtio disk" panic. Also: QueueNumMax = 8, DeviceFeatures = 0, Status/QueueReady read back
+// The probe reads return their exact constants — a wrong value makes the guest driver fail to
+// detect the disk. Also: QueueNumMax = 8, DeviceFeatures = 0, Status/QueueReady read back
 // stored state, and an in-window hole reads 0.
 test "load: probe constants + stored reads + hole" {
     var v: Virtio = .{};

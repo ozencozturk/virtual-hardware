@@ -17,7 +17,7 @@ pub fn getbit(value: u64, bit: u6) u1 {
 }
 
 // Power-of-two alignment check (alignment = RISC-V access width 1/2/4/8, or
-// IALIGN for fetch). Pure predicate; trap policy lives in cpu.requireAligned.
+// IALIGN for fetch). Pure predicate; the caller decides the trap policy.
 pub fn isAligned(addr: u64, alignment: u64) bool {
     std.debug.assert(alignment != 0 and (alignment & (alignment - 1)) == 0);
     return addr & (alignment - 1) == 0;

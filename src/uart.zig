@@ -345,7 +345,7 @@ test "txbuffer tests" {
         try testing.expectEqual(0, uart.tx_buffer.len);
     }
 }
-// #1 — RX FIFO push/pop order, DR reflects non-empty, drain clears DR, empty reads 0.
+// RX FIFO push/pop order, DR reflects non-empty, drain clears DR, empty reads 0.
 test "rx fifo push/pop order + DR" {
     var uart: Uart = .{}; // dlab=0
     uart.rx_fifo.push('H');
@@ -363,7 +363,7 @@ test "rx fifo push/pop order + DR" {
     try testing.expectEqual(0, try uart.load(Uart.RBR_DLL, 1));
 }
 
-// #2 — DLAB routing intact: with DLAB=1, offset 0 reads DLL, NOT the RX FIFO (RX must not pop).
+// DLAB routing intact: with DLAB=1, offset 0 reads DLL, NOT the RX FIFO (RX must not pop).
 test "rx does not break DLAB baud path" {
     var uart: Uart = .{};
     uart.rx_fifo.push('Z');
@@ -385,7 +385,7 @@ test "rbr read mutates the fifo" {
     try testing.expectEqual(0, uart.rx_fifo.len);
 }
 
-// #4 — irqAsserted() == (ERBFI && DR) || (ETBEI && tx_int_pending). Both terms are required:
+// irqAsserted() == (ERBFI && DR) || (ETBEI && tx_int_pending). Both terms are required:
 // without the ERBFI gate an RX interrupt asserts even when RX interrupts are disabled; without
 // the ETBEI gate an interrupt-driven writer that sleeps on the TX-empty interrupt never wakes.
 test "irqAsserted truth table" {
@@ -432,7 +432,7 @@ test "irqAsserted truth table" {
     try testing.expect(!uart.tx_int_pending);
 }
 
-// #5 — Overflow rule: a full (16-deep) FIFO deterministically drops the incoming byte.
+// Overflow rule: a full (16-deep) FIFO deterministically drops the incoming byte.
 test "rx fifo overflow drops incoming byte" {
     var uart: Uart = .{};
     var i: u8 = 0;
@@ -447,7 +447,7 @@ test "rx fifo overflow drops incoming byte" {
     try testing.expectEqual('a', try uart.load(Uart.RBR_DLL, 1));
 }
 
-// #6 — receive() is the serial RX line entry (≈ QEMU serial_receive): one byte in → queued in the
+// receive() is the serial RX line entry (≈ QEMU serial_receive): one byte in → queued in the
 // FIFO, DR reflects it, RBR reads it back. rxHasSpace() is the delivery-layer flow-control gate —
 // TRUE while there's room, FALSE at capacity. Mutation/inversion of isFull flips the gate → the pump
 // refuses to feed an empty FIFO or overruns a full one (silent keystroke loss).
