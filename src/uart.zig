@@ -69,8 +69,24 @@ pub const Uart = struct {
             RBR_DLL => if (Lcr.fromBits(self.lcr).dlab == 1) self.dll else self.rx_fifo.pop(),
             IER_DLM => if (Lcr.fromBits(self.lcr).dlab == 1) self.dlm else self.ier,
             IIR => blk: {
-                const iir = Iir{ .pending = @intFromBool(self.tx_int_pending) };
-                self.tx_int_pending = false; // reading IIR/ISR acks the TX-complete interrupt
+                // 16550 IIR is ACTIVE-LOW and priority-encoded: bit0 = 0 means an
+                // interrupt IS pending, and bits1-3 name the highest-priority source.
+                // Reporting the source is what lets an interrupt-driven driver
+                // dispatch; a bare "pending" flag (or the wrong polarity) makes the
+                // ISR read "no interrupt" and bail. RX (RDI) outranks TX (THRE).
+                const ier = Ier.fromBits(self.ier);
+                const rx = ier.rx_int_enable == 1 and self.rx_fifo.dataReady();
+                const tx = ier.tx_int_enable == 1 and self.tx_int_pending;
+                const iir: Iir = if (rx)
+                    .{ .not_pending = 0, .id = Iir.ID_RX }
+                else if (tx)
+                    .{ .not_pending = 0, .id = Iir.ID_TX }
+                else
+                    .{};
+                // Reading IIR acks a THRE interrupt — but ONLY when THRE is the
+                // source being reported. An RX interrupt is acked by reading RBR, so
+                // an IIR read while RX outranks TX must not swallow the pending TX.
+                if (tx and !rx) self.tx_int_pending = false;
                 break :blk iir.toBits();
             },
             LCR => self.lcr,
@@ -203,11 +219,16 @@ pub const Ier = packed struct {
 };
 
 pub const Iir = packed struct {
-    pending: u1 = 0,
-    _res: u7 = 0,
+    not_pending: u1 = 1, // bit0, ACTIVE-LOW: 1 = no interrupt pending, 0 = pending
+    id: u3 = 0, // bits1-3: interrupt id, meaningful only when not_pending == 0
+    _res: u2 = 0,
+    fifo: u2 = 0, // bits6-7: 0b11 when FIFOs enabled; left 0 (16450-style report)
     comptime {
         std.debug.assert(@bitSizeOf(Iir) == 8);
     }
+
+    pub const ID_RX: u3 = 0b010; // received data available (byte 0x04)
+    pub const ID_TX: u3 = 0b001; // transmitter holding register empty (byte 0x02)
 
     pub fn fromBits(v: u8) Iir {
         return @bitCast(v);
@@ -430,6 +451,33 @@ test "irqAsserted truth table" {
     uart.lcr = (Lcr{ .dlab = 1 }).toBits();
     try uart.store(Uart.THR_DLL, 1, 0x03); // this is a DLL divisor write, not a transmit
     try testing.expect(!uart.tx_int_pending);
+}
+
+// The IIR must be ACTIVE-LOW and name its source, or an interrupt-driven driver
+// reads it, sees "no interrupt", and bails — the port works in polling mode and
+// stalls the instant it goes interrupt-driven. This is the regression test for that
+// exact bug: the previous model set bit0 = tx_int_pending, so it returned 0x00/0x01
+// (NO_INT) precisely when an interrupt WAS pending.
+test "IIR is active-low and reports the highest-priority source" {
+    var uart: Uart = .{};
+
+    // No interrupt pending → NO_INT (bit0 set).
+    try testing.expectEqual(0x01, try uart.load(Uart.IIR, 1));
+
+    // TX pending + ETBEI → THRE source, bit0 CLEAR (0x02, not the old 0x01).
+    try uart.store(Uart.THR_DLL, 1, 'A'); // arms tx_int_pending
+    uart.ier = (Ier{ .tx_int_enable = 1 }).toBits();
+    try testing.expectEqual(0x02, try uart.load(Uart.IIR, 1));
+    try testing.expect(!uart.tx_int_pending); // reading IIR acked the THRE interrupt
+
+    // RX pending outranks a simultaneously-pending TX → RDI (0x04), and an RX-source
+    // IIR read must NOT ack the TX interrupt (that is RBR's job).
+    uart = .{};
+    try uart.store(Uart.THR_DLL, 1, 'A'); // TX pending
+    uart.receive('Q'); // RX pending
+    uart.ier = (Ier{ .rx_int_enable = 1, .tx_int_enable = 1 }).toBits();
+    try testing.expectEqual(0x04, try uart.load(Uart.IIR, 1));
+    try testing.expect(uart.tx_int_pending); // TX still pending — only RBR clears RX
 }
 
 // Overflow rule: a full (16-deep) FIFO deterministically drops the incoming byte.
