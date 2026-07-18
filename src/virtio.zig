@@ -10,6 +10,9 @@ pub const Virtio = struct {
     pub const DEVICE_ID = 2;
     pub const VENDOR_ID = 0x554d4551;
 
+    pub const VIRTIO_F_VERSION_1: u6 = 32;
+    const DEVICE_FEATURES: u64 = @as(u64, 1) << VIRTIO_F_VERSION_1;
+
     status: u32 = 0,
     driver_features: u32 = 0,
     queue_num: u32 = 0,
@@ -23,6 +26,7 @@ pub const Virtio = struct {
     last_avail_index: u16 = 0,
     interrupt_status: u32 = 0,
     used_index: u16 = 0,
+    device_features_sel: u32 = 0,
 
     fn setLow(v: *u64, value: u64) void {
         var desc = VirtioAddr.fromBits(v.*);
@@ -52,6 +56,7 @@ pub const Virtio = struct {
             0x44 => self.queue_ready = @truncate(value),
             0x30 => self.queue_sel = @truncate(value),
             0x50 => self.notify_pending = true,
+            0x14 => self.device_features_sel = @truncate(value),
             // write-1-to-clear, masked to the two defined bits
             0x64 => self.interrupt_status &= ~(@as(u32, @truncate(value)) & VirtioInterruptStatus.W1C_MASK),
             else => {},
@@ -97,6 +102,9 @@ pub const Virtio = struct {
         return memory[off..][0..len];
     }
 
+    fn capacity(self: *const Virtio) u64 {
+        return self.disk.len / 512;
+    }
     pub fn load(self: *Virtio, addr: u64, size: usize) !u64 {
         if (size != 4 or !bits.isAligned(addr, 4)) {
             return error.AccessFault;
@@ -106,11 +114,16 @@ pub const Virtio = struct {
             0x04 => Virtio.VERSION,
             0x08 => Virtio.DEVICE_ID,
             0x0c => Virtio.VENDOR_ID,
-            0x10 => 0,
+            0x10 => blk: {
+                const f = VirtioAddr.fromBits(DEVICE_FEATURES);
+                break :blk if (self.device_features_sel == 1) f.hi else f.low;
+            },
             0x70 => self.status,
             0x44 => self.queue_ready,
             0x34 => Virtio.QUEUE_NUM_MAX,
             0x60 => self.interrupt_status,
+            0x100 => VirtioAddr.fromBits(self.capacity()).low,
+            0x104 => VirtioAddr.fromBits(self.capacity()).hi,
             else => 0,
         };
     }
@@ -130,6 +143,7 @@ pub const Virtio = struct {
         h.update(std.mem.asBytes(&self.last_avail_index));
         h.update(std.mem.asBytes(&self.interrupt_status));
         h.update(std.mem.asBytes(&self.used_index));
+        h.update(std.mem.asBytes(&self.device_features_sel));
         h.update(self.disk);
     }
 
@@ -899,4 +913,73 @@ test "process: malformed chain still publishes a used entry (completes, no leak)
     // ... cursor advanced and the interrupt is raised.
     try testing.expectEqual(@as(u16, 1), v.last_avail_index);
     try testing.expect(v.irqAsserted());
+}
+
+// Feature negotiation, the modern (VERSION=2) path a real Linux driver requires.
+// DeviceFeaturesSel (0x14) picks which 32-bit window of the 64-bit feature set
+// 0x10 returns: window 0 = bits 0..31, window 1 = bits 32..63. VIRTIO_F_VERSION_1
+// is bit 32, so it shows up as bit 0 of the HIGH window and nowhere else. Without
+// this the driver can never read the bit and vm_finalize_features() fails -EINVAL.
+// Negative control: drop the 0x14 store arm -> sel stays 0 -> the high-window read
+// comes back 0 and the VERSION_1 assert goes red.
+test "features: DeviceFeaturesSel selects the window; VIRTIO_F_VERSION_1 lives in the high half" {
+    var v: Virtio = .{};
+
+    // default window (sel 0): no low feature bits offered
+    try testing.expectEqual(@as(u64, 0), try v.load(0x10, 4));
+
+    // select the high window: bit 0 here == feature bit 32 == VIRTIO_F_VERSION_1
+    try v.store(0x14, 4, 1);
+    try testing.expectEqual(@as(u64, 1) << (Virtio.VIRTIO_F_VERSION_1 - 32), try v.load(0x10, 4));
+
+    // back to the low window — the bit is only in the high half
+    try v.store(0x14, 4, 0);
+    try testing.expectEqual(@as(u64, 0), try v.load(0x10, 4));
+}
+
+// virtio-blk config-space capacity (a __u64 in 512-byte sectors at config offset 0,
+// i.e. MMIO 0x100/0x104). It is DERIVED from disk.len, not a constant — a driver
+// reads it as two aligned 32-bit halves. A zero here is what makes the block layer
+// report limit=0 and reject every access ("beyond end of device").
+// Negative control: hard-code capacity() (e.g. return 0) -> every assert below fails.
+test "capacity: 0x100/0x104 report disk.len/512, low and high halves" {
+    var v: Virtio = .{};
+
+    // empty disk -> 0 sectors
+    try testing.expectEqual(@as(u64, 0), try v.load(0x100, 4));
+
+    // a real backing size: 4096 bytes = 8 sectors, entirely in the low half
+    var buf: [4096]u8 = undefined;
+    v.disk = &buf;
+    try testing.expectEqual(@as(u64, 8), try v.load(0x100, 4));
+    try testing.expectEqual(@as(u64, 0), try v.load(0x104, 4));
+
+    // a different size yields a different capacity -> proves it tracks disk.len
+    var buf2: [512 * 3]u8 = undefined;
+    v.disk = &buf2;
+    try testing.expectEqual(@as(u64, 3), try v.load(0x100, 4));
+
+    // a capacity that overflows 32 bits must land in the HIGH half. Fake the length
+    // only — capacity() reads disk.len and never touches the bytes, so no backing is
+    // needed (a 2 TiB allocation would be absurd).
+    var huge: []u8 = undefined;
+    huge.len = @as(usize, 0x1_0000_0000) * 512; // 2^32 sectors
+    v.disk = huge;
+    try testing.expectEqual(@as(u64, 0), try v.load(0x100, 4)); // low half wraps to 0
+    try testing.expectEqual(@as(u64, 1), try v.load(0x104, 4)); // high half = 1
+}
+
+// device_features_sel is real state (which feature window the driver selected), so
+// it must fold into the determinism hash — a field that isn't hashed lets two
+// divergent runs look identical to record/replay. Negative control: remove the
+// device_features_sel line from hash() -> the two hashes collide and this fails.
+test "hash: device_features_sel participates in the determinism hash" {
+    const a = Virtio{};
+    const b = Virtio{ .device_features_sel = 1 };
+
+    var ha = std.hash.Wyhash.init(0);
+    var hb = std.hash.Wyhash.init(0);
+    a.hash(&ha);
+    b.hash(&hb);
+    try testing.expect(ha.final() != hb.final());
 }
