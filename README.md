@@ -58,3 +58,8 @@ Runs the `bits` unit tests plus the `Uart`/`Virtio` model tests.
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+## Acknowledgements
+
+Parts of this project were developed with assistance from AI coding tools
+(Claude). All code was reviewed and is maintained by the author.
