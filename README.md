@@ -1,7 +1,8 @@
 # virtual-hardware
 
 Reusable, dependency-free virtual hardware models in Zig: a bit/byte utility
-library and a set of memory-mapped device models (16550 UART, virtio-blk).
+library and a set of memory-mapped device models (16550 UART, virtio-blk,
+virtio-console).
 
 Extracted from a deterministic RISC-V emulator so the same device models can be
 shared with other guests and machine implementations. The models are pure state
@@ -16,7 +17,7 @@ The package exposes two modules:
 | Module    | Root            | Contents                                             |
 |-----------|-----------------|------------------------------------------------------|
 | `bits`    | `src/bits.zig`  | Bit-field extract/insert, mask building, alignment and bounds predicates, little-endian readers. |
-| `devices` | `src/root.zig`  | `Uart` (16550) and `Virtio` (virtio-blk MMIO). Imports `bits`. |
+| `devices` | `src/root.zig`  | `Uart` (16550), `Virtio` (virtio-blk MMIO) and `VirtioConsole` (virtio-console MMIO). Imports `bits`. |
 
 ## Usage
 
@@ -45,6 +46,10 @@ try uart.store(devices.Uart.THR_DLL, 1, 'H'); // width is a runtime argument
 
 var disk: devices.Virtio = .{};
 _ = disk;
+
+// The console performs no I/O itself; the owner supplies the sink.
+var console: devices.VirtioConsole = .{};
+_ = console;
 ```
 
 ## Testing
@@ -53,7 +58,7 @@ _ = disk;
 zig build test --summary all
 ```
 
-Runs the `bits` unit tests plus the `Uart`/`Virtio` model tests.
+Runs the `bits` unit tests plus the `Uart`/`Virtio`/`VirtioConsole` model tests.
 
 ## License
 
