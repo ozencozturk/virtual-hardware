@@ -118,7 +118,6 @@ const Addr = packed struct(u64) {
     }
 };
 
-pub const MMIO_SIZE = 0x1000;
 const MAGIC: u32 = 0x7472_6976; // "virt"
 const VERSION: u32 = 2;
 const DEVICE_ID: u32 = 3; // console
@@ -168,6 +167,9 @@ const Queue = struct {
 };
 
 pub const VirtioConsole = struct {
+    /// Width of the MMIO window this device answers on.
+    pub const MMIO_SIZE = 0x1000;
+
     status: u32 = 0,
     device_features_sel: u32 = 0,
     driver_features_sel: u32 = 0,
