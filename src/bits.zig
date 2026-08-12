@@ -64,6 +64,7 @@ pub fn signedField(comptime T: type, word: u64, comptime hi: u6, comptime lo: u6
     return @bitCast(@as(U, @intCast(bitrange(word, hi, lo))));
 }
 
+// Fixed width, no bounds check: the caller must have validated the window first.
 pub fn u16le(b: []const u8, off: usize) u16 {
     return std.mem.readInt(u16, b[off..][0..2], .little);
 }
@@ -73,6 +74,31 @@ pub fn u32le(b: []const u8, off: usize) u32 {
 }
 pub fn u64le(b: []const u8, off: usize) u64 {
     return std.mem.readInt(u64, b[off..][0..8], .little);
+}
+
+// Runtime width, bounds-checked; null for a width other than 1/2/4/8 or a short buffer.
+pub fn loadLe(b: []const u8, len: usize) ?u64 {
+    if (b.len < len) return null;
+    return switch (len) {
+        1 => b[0],
+        2 => u16le(b, 0),
+        4 => u32le(b, 0),
+        8 => u64le(b, 0),
+        else => null,
+    };
+}
+
+// Inverse of loadLe; false and no write at all when it cannot serve the access.
+pub fn storeLe(b: []u8, len: usize, value: u64) bool {
+    if (b.len < len) return false;
+    switch (len) {
+        1 => b[0] = @truncate(value),
+        2 => std.mem.writeInt(u16, b[0..2], @truncate(value), .little),
+        4 => std.mem.writeInt(u32, b[0..4], @truncate(value), .little),
+        8 => std.mem.writeInt(u64, b[0..8], value, .little),
+        else => return false,
+    }
+    return true;
 }
 test "bitrange" {
     try testing.expectEqual(bitrange(0xDEADBEEF, 31, 28), 0xD);
@@ -125,4 +151,40 @@ test "isAligned" {
     try std.testing.expect(!isAligned(0x8000_0002, 4));
     try std.testing.expect(!isAligned(0x1001, 2));
     try std.testing.expect(isAligned(0xdead_beef, 1)); // byte access never misaligns
+}
+
+test "loadLe decodes each supported width, little-endian" {
+    const bytes = [_]u8{ 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88 };
+    try testing.expectEqual(@as(?u64, 0x11), loadLe(&bytes, 1));
+    try testing.expectEqual(@as(?u64, 0x2211), loadLe(&bytes, 2));
+    try testing.expectEqual(@as(?u64, 0x4433_2211), loadLe(&bytes, 4));
+    try testing.expectEqual(@as(?u64, 0x8877_6655_4433_2211), loadLe(&bytes, 8));
+}
+
+test "loadLe refuses widths and buffers it cannot serve" {
+    const bytes = [_]u8{ 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88 };
+    try testing.expectEqual(@as(?u64, null), loadLe(&bytes, 0));
+    try testing.expectEqual(@as(?u64, null), loadLe(&bytes, 3));
+    try testing.expectEqual(@as(?u64, null), loadLe(&bytes, 16));
+    try testing.expectEqual(@as(?u64, null), loadLe(bytes[0..1], 2));
+    try testing.expectEqual(@as(?u64, null), loadLe(&.{}, 1));
+}
+
+test "storeLe round-trips through loadLe and truncates to width" {
+    for ([_]usize{ 1, 2, 4, 8 }) |len| {
+        var buf: [8]u8 = @splat(0);
+        try testing.expect(storeLe(&buf, len, 0x8877_6655_4433_2211));
+        const masked: u64 = if (len == 8)
+            0x8877_6655_4433_2211
+        else
+            0x8877_6655_4433_2211 & ((@as(u64, 1) << @intCast(len * 8)) - 1);
+        try testing.expectEqual(@as(?u64, masked), loadLe(&buf, len));
+    }
+}
+
+test "storeLe leaves the buffer untouched when it cannot serve the access" {
+    var buf: [8]u8 = @splat(0);
+    try testing.expect(!storeLe(&buf, 3, 0xFFFF_FFFF)); // unsupported width
+    try testing.expect(!storeLe(buf[0..1], 4, 0xFFFF_FFFF)); // buffer too short
+    try testing.expectEqual(@as([8]u8, @splat(0)), buf);
 }
