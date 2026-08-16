@@ -1,6 +1,6 @@
 .{
-    .name = .virtual_hardware,
-    .fingerprint = 0xf5744112b60a276a,
+    .name = .virtual_platform,
+    .fingerprint = 0x32bf78396550d958,
     .version = "0.1.0",
     .minimum_zig_version = "0.17.0",
     .dependencies = .{},

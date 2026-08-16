@@ -11,11 +11,11 @@ pub fn build(b: *std.Build) void {
     });
 
     // Device models (uart + virtio); virtio imports `bits`.
-    const devices = b.addModule("devices", .{
+    const virtual_devices = b.addModule("virtual_devices", .{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
     });
-    devices.addImport("bits", bits);
+    virtual_devices.addImport("bits", bits);
 
     // Test step: run bits.zig tests and the devices root tests.
     const bits_tests = b.addTest(.{ .root_module = bits });

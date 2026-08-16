@@ -1,4 +1,4 @@
-# virtual-hardware
+# virtual-platform
 
 Reusable, dependency-free virtual hardware models in Zig: a bit/byte utility
 library and a set of memory-mapped device models (16550 UART, virtio-blk,
@@ -24,22 +24,22 @@ The package exposes two modules:
 Add the dependency:
 
 ```sh
-zig fetch --save git+https://github.com/ozencozturk/virtual-hardware.git
+zig fetch --save git+https://github.com/ozencozturk/virtual-platform.git
 ```
 
 Wire the modules into your build (`build.zig`):
 
 ```zig
-const vhw = b.dependency("virtual_hardware", .{});
-your_module.addImport("bits", vhw.module("bits"));
-your_module.addImport("devices", vhw.module("devices"));
+const vp = b.dependency("virtual_platform", .{});
+your_module.addImport("bits", vp.module("bits"));
+your_module.addImport("virtual_devices", vp.module("virtual_devices"));
 ```
 
 Then in source:
 
 ```zig
 const bits = @import("bits");
-const devices = @import("devices");
+const devices = @import("virtual_devices");
 
 var uart: devices.Uart = .{};
 try uart.store(devices.Uart.THR_DLL, 1, 'H'); // width is a runtime argument
