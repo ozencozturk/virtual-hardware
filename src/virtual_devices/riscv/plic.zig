@@ -3,8 +3,6 @@ const std = @import("std");
 const testing = std.testing;
 pub const Plic = struct {
     pub const PLIC_SIZE = 0x0400_0000;
-    pub const UART0_IRQ = 10;
-    pub const VIRTIO0_IRQ = 1;
     pub const NUM_SOURCES = 54; // QEMU constant
     pub const NUM_CONTEXT = 2; // QEMU const -- m & s. Note if we need to support multiple heart 2=h1-m, 3=h2-s etc
     pub const PENDING_BASE = 0x0000_1000;
