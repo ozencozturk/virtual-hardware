@@ -18,7 +18,7 @@ The package exposes five modules:
 | Module | Root | Contents |
 |---|---|---|
 | `bits` | `src/bits/bits.zig` | Bit-field extract/insert, mask building, alignment and bounds predicates, little-endian readers. |
-| `virtual_devices` | `src/virtual_devices/virtual_devices.zig` | `Uart` (16550), `Virtio` (virtio-blk MMIO), `VirtioConsole` (virtio-console MMIO), plus per-architecture namespaces: `riscv.Plic`/`riscv.Clint` and `x86.AcpiPm`. Imports `bits`. |
+| `virtual_devices` | `src/virtual_devices/virtual_devices.zig` | `Uart` (16550), `Virtio` (virtio-blk MMIO), `VirtioConsole` (virtio-console MMIO), plus per-architecture namespaces: `riscv.Plic`/`riscv.Clint` and `x86.AcpiPm`/`x86.Ioapic`. Imports `bits`. |
 | `acpi` | `src/acpi/acpi.zig` | Serializes a declarative machine description into ACPI tables: RSDP, RSDT, FADT, MADT and a DSDT encoded from device descriptors. std-only. |
 | `fdt` | `src/fdt/fdt.zig` | Flattened device tree (DTB) serializer. std-only. |
 | `linux_boot` | `src/linux_boot/linux_boot.zig` | Linux image headers and boot-protocol structures, namespaced per architecture. |
