@@ -179,8 +179,8 @@ pub const Lapic = struct {
 
     timer_icr: u32 = 0,
     timer_dcr: DivideConfig = .{},
-    /// Absolute clock value at which the timer fires. Null = disarmed. This is
-    /// the whole point of the module: a time in *guest execution*, not wall time.
+    /// Absolute value on the caller's clock at which the timer fires. Null =
+    /// disarmed.
     deadline: ?u64 = null,
     /// Last value the guest wrote to IA32_TSC_DEADLINE, so a read-back returns
     /// what it wrote. Zero means disarmed.
@@ -322,10 +322,9 @@ pub const Lapic = struct {
     }
 
     /// Processor priority (SDM Vol 3, 11.8.3.1): the MAXIMUM of the task
-    /// priority and the highest in-service class — not simply the in-service
-    /// class, which is what this returned before and which reported a priority
-    /// *below* TPR whenever the guest had raised TPR above whatever was in
-    /// service.
+    /// priority and the highest in-service class. Returning the in-service class
+    /// alone would report a priority *below* TPR whenever the guest has raised
+    /// TPR above whatever is in service.
     ///
     /// When TPR wins it is returned whole, sub-class included; when the
     /// in-service class wins the sub-class reads zero.
@@ -449,8 +448,8 @@ pub const Lapic = struct {
                 self.timer_dcr = @bitCast(value);
                 if (self.deadline != null) self.armTimer(now);
             },
-            // ICR (IPIs) is accepted and dropped: a single-vCPU guest sends
-            // itself no IPIs worth modelling, and self-INIT/SIPI never happens.
+            // ICR (IPIs) is accepted and dropped. Inter-processor interrupts
+            // are not modelled, so a multi-processor guest needs this filling in.
             Reg.icr_low, .icr_high => {},
             else => {},
         }

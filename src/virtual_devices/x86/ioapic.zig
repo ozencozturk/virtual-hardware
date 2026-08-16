@@ -35,10 +35,9 @@ const IoapicVersion = packed struct(u32) {
     _rsvd24: u8 = 0,
 };
 
-// The guest reaches each 64-bit RTE as two 32-bit halves through IOWIN. This is
-// a register-access width split, not a field split — the fields themselves are
-// named on RedirectionEntry — so it gets its own struct rather than a pair of
-// 64-bit masks.
+// A 64-bit RTE as the two 32-bit halves the guest reaches through IOWIN. This is
+// the register-access split only; the entry's fields are named on
+// RedirectionEntry.
 const Halves = packed struct(u64) {
     low: u32 = 0,
     high: u32 = 0,
