@@ -6,23 +6,23 @@ pub fn build(b: *std.Build) void {
 
     // Leaf utility module.
     const bits = b.addModule("bits", .{
-        .root_source_file = b.path("src/bits.zig"),
+        .root_source_file = b.path("src/bits/root.zig"),
         .target = target,
     });
 
     // Device models (uart + virtio); virtio imports `bits`.
     const virtual_devices = b.addModule("virtual_devices", .{
-        .root_source_file = b.path("src/root.zig"),
+        .root_source_file = b.path("src/virtual_devices/root.zig"),
         .target = target,
     });
     virtual_devices.addImport("bits", bits);
 
-    // Test step: run bits.zig tests and the devices root tests.
+    // Test step: run the bits tests and the virtual_devices root tests.
     const bits_tests = b.addTest(.{ .root_module = bits });
     const run_bits_tests = b.addRunArtifact(bits_tests);
 
     const devices_test_mod = b.createModule(.{
-        .root_source_file = b.path("src/root.zig"),
+        .root_source_file = b.path("src/virtual_devices/root.zig"),
         .target = target,
         .optimize = optimize,
     });
