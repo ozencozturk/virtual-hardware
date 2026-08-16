@@ -97,9 +97,10 @@ pub const Madt = struct {
     entries: []const MadtEntry,
 };
 
-/// One AML device object placed under \_SB: a _HID, a _UID, and a _CRS describing
-/// a single fixed MMIO window plus one edge/active-high interrupt. (Exactly what a
-/// virtio-mmio node needs; broaden the descriptor when a second shape appears.)
+/// One AML device object placed under \_SB: a _HID, a _UID, and a _CRS
+/// describing exactly one fixed MMIO window and one edge-triggered, active-high
+/// interrupt. A device needing a different resource shape needs the descriptor
+/// widened first.
 pub const AmlDevice = struct {
     name: [4]u8, //        ACPI name segment, e.g. "VR00".*
     hid: []const u8, //    _HID value, e.g. "LNRO0005"
@@ -137,8 +138,10 @@ pub const Oem = struct {
 };
 
 pub const Params = struct {
-    rsdp_gpa: Gpa, //     RSDP location (0xF0000, in the BIOS scan window). The
-    //                    RSDT/FADT/DSDT/MADT block follows it — see tablesGpa.
+    rsdp_gpa: Gpa, //     Where to place the RSDP. Must be somewhere a guest
+    //                    will look — conventionally inside the 0xE0000..0xFFFFF
+    //                    scan window. The RSDT/FADT/DSDT/MADT block follows it,
+    //                    see tablesGpa.
 
     /// Who the tables claim to come from.
     oem: Oem,

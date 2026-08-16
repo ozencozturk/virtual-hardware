@@ -222,7 +222,7 @@ test "Ioapic: programming an RTE sets its vector and mask" {
     try testing.expectEqual(@as(u8, 0x30), io.vectorFor(0));
 }
 
-test "Ioapic: pin 4 (IRQ4, COM1) is independent of pin 0" {
+test "Ioapic: one pin's vector and mask are independent of another's" {
     var io = Ioapic{};
     // pin 4 low reg = 0x10 + 4*2 = 0x18.
     io.mmioWrite(IOREGSEL, @intFromEnum(Reg.rte_base) + PIN_A * 2);
@@ -233,7 +233,7 @@ test "Ioapic: pin 4 (IRQ4, COM1) is independent of pin 0" {
     try testing.expectEqual(@as(u8, 0), io.vectorFor(0));
 }
 
-test "Ioapic: pin 5 (IRQ5, virtio) exposes its vector and mask independently" {
+test "Ioapic: a programmed pin exposes its vector and mask, masked or not" {
     var io = Ioapic{};
     io.mmioWrite(IOREGSEL, @intFromEnum(Reg.rte_base) + PIN_B * 2);
     io.mmioWrite(IOWIN, 0x40); // vector 0x40, unmasked
