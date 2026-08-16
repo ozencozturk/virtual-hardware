@@ -3,7 +3,9 @@
 //! initrd and DTB in guest RAM) stays with the VMM — only the formats live here.
 
 pub const arm64 = @import("arm64.zig");
+pub const x86 = @import("x86/x86.zig");
 
 test {
     _ = @import("arm64.zig");
+    _ = @import("x86/x86.zig");
 }
