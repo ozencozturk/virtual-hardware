@@ -23,6 +23,12 @@ pub fn build(b: *std.Build) void {
         .target = target,
     });
 
+    // Linux boot-protocol structures, namespaced per architecture.
+    const linux_boot = b.addModule("linux_boot", .{
+        .root_source_file = b.path("src/linux_boot/root.zig"),
+        .target = target,
+    });
+
     // Test step: run the bits tests and the virtual_devices root tests.
     const bits_tests = b.addTest(.{ .root_module = bits });
     const run_bits_tests = b.addRunArtifact(bits_tests);
@@ -39,8 +45,12 @@ pub fn build(b: *std.Build) void {
     const fdt_tests = b.addTest(.{ .root_module = fdt });
     const run_fdt_tests = b.addRunArtifact(fdt_tests);
 
+    const linux_boot_tests = b.addTest(.{ .root_module = linux_boot });
+    const run_linux_boot_tests = b.addRunArtifact(linux_boot_tests);
+
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&run_bits_tests.step);
     test_step.dependOn(&run_devices_tests.step);
     test_step.dependOn(&run_fdt_tests.step);
+    test_step.dependOn(&run_linux_boot_tests.step);
 }
