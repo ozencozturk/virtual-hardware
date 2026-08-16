@@ -35,6 +35,12 @@ pub fn build(b: *std.Build) void {
         .target = target,
     });
 
+    // AArch64 ISA layout: PSTATE/ESR decode. Peer of the `x86` module.
+    const arm64 = b.addModule("arm64", .{
+        .root_source_file = b.path("src/arm64/arm64.zig"),
+        .target = target,
+    });
+
     // Linux boot-protocol structures, namespaced per architecture.
     const linux_boot = b.addModule("linux_boot", .{
         .root_source_file = b.path("src/linux_boot/linux_boot.zig"),
@@ -63,6 +69,9 @@ pub fn build(b: *std.Build) void {
     const x86_tests = b.addTest(.{ .root_module = x86 });
     const run_x86_tests = b.addRunArtifact(x86_tests);
 
+    const arm64_tests = b.addTest(.{ .root_module = arm64 });
+    const run_arm64_tests = b.addRunArtifact(arm64_tests);
+
     const linux_boot_tests = b.addTest(.{ .root_module = linux_boot });
     const run_linux_boot_tests = b.addRunArtifact(linux_boot_tests);
 
@@ -72,5 +81,6 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_fdt_tests.step);
     test_step.dependOn(&run_acpi_tests.step);
     test_step.dependOn(&run_x86_tests.step);
+    test_step.dependOn(&run_arm64_tests.step);
     test_step.dependOn(&run_linux_boot_tests.step);
 }
