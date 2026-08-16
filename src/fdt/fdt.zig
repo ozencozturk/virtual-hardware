@@ -209,12 +209,12 @@ fn encodeValue(scratch: []u8, v: Value) ![]const u8 {
 
 const testing = std.testing;
 
-/// The 40 header bytes dtc ACTUALLY emitted for payloads/guest.dtb, frozen here.
-/// Verified with `xxd -l 40 -g 4 payloads/guest.dtb`.
+/// The 40 header bytes dtc ACTUALLY emitted for a real device tree, frozen here.
+/// Reproduce with `xxd -l 40 -g 4 <any dtc-produced .dtb>`.
 ///
 /// This is an EXTERNAL oracle — the whole value is that these bytes did not come
-/// from us. Frozen as a literal rather than @embedFile'd on purpose: no guest.dtb
-/// artifact is shipped, and the oracle should outlive it.
+/// from us. Frozen as a literal rather than @embedFile'd on purpose: no .dtb
+/// artifact is shipped with this package, and the oracle should outlive any one.
 const dtc_header_bytes = [40]u8{
     0xd0, 0x0d, 0xfe, 0xed, // magic
     0x00, 0x00, 0x04, 0x9f, // totalsize         = 1183
@@ -231,7 +231,7 @@ const dtc_header_bytes = [40]u8{
 // `@sizeOf(Header) == 40` does NOT catch a transposition: swap any two u32 fields
 // and it is still 40 bytes. THIS catches it — every field holds a different
 // number, and the numbers came from dtc rather than from us. It is the same shape
-// as riscv-emu's ElfHeader test reading a real minimal.elf.
+// as any header test read against a real, externally produced binary.
 //
 // The order is worth staring at: off_dt_struct(8), off_dt_strings(12),
 // off_mem_rsvmap(16) are listed in the OPPOSITE order from the regions they point
@@ -404,11 +404,11 @@ test "fdt: intern returns a name's offset and dedupes repeats" {
 // suffixes ("cells\0" inside "#address-cells\0" is a correctly terminated
 // "cells"). The entry-walk compares whole NUL-delimited entries only, so it appends.
 //
-// Safe because it never arises: dumped payloads/guest.dtb's strings block — 17
-// names, summing to exactly its size_dt_strings of 195, so dtc shares nothing — and
-// NO name in that set, nor either of the two linux,initrd-* names, is a
-// suffix of another. Output is byte-identical for our tree. If a future name ever
-// IS a suffix of an existing one, this test documents that we spend the bytes.
+// The cost is bounded and the output stays CORRECT either way — a tree whose names
+// are suffixes of one another simply spends a few extra bytes in the strings block,
+// which is what this test pins. dtc itself shares nothing across whole entries in
+// the blobs checked here, so for a tree with no suffix pairs the output is
+// byte-identical to dtc's; for one with them, it is merely larger.
 test "fdt: intern matches whole entries only, not suffixes" {
     var buf: [64]u8 = undefined;
     var strs: [64]u8 = undefined;

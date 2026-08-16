@@ -16,8 +16,8 @@ pub fn getbit(value: u64, bit: u6) u1 {
     return @truncate(value >> bit);
 }
 
-// Power-of-two alignment check (alignment = RISC-V access width 1/2/4/8, or
-// IALIGN for fetch). Pure predicate; the caller decides the trap policy.
+// Power-of-two alignment check (alignment = an access width such as 1/2/4/8, or an
+// instruction-fetch alignment). Pure predicate; the caller decides the trap policy.
 pub fn isAligned(addr: u64, alignment: u64) bool {
     std.debug.assert(alignment != 0 and (alignment & (alignment - 1)) == 0);
     return addr & (alignment - 1) == 0;
@@ -41,7 +41,8 @@ pub fn setrange(value: u64, comptime hi: u6, comptime lo: u6, field: u64) u64 {
 }
 
 /// Merge the `mask` bits of `v` into `cur`; bits outside `mask` keep their `cur` value.
-/// The canonical WARL/allow-list register write: (cur & ~mask) | (v & mask).
+/// The canonical write-any-read-legal / allow-list register write, where `mask`
+/// selects the writable bits: (cur & ~mask) | (v & mask).
 pub fn mergeBits(cur: u64, v: u64, mask: u64) u64 {
     return (cur & ~mask) | (v & mask);
 }
@@ -109,11 +110,11 @@ test "bitrange" {
     try testing.expectEqual(0, clearbit(1, 0));
 }
 test "signedField" {
-    // I-type imm at [31:20], i12: 0xFFF00000 → field 0xFFF → -1
+    // a 12-bit signed immediate at [31:20]: 0xFFF00000 → field 0xFFF → -1
     try testing.expectEqual(@as(i12, -1), signedField(i12, 0xFFF00000, 31, 20));
     try testing.expectEqual(@as(i12, 1), signedField(i12, 0x00100000, 31, 20));
     try testing.expectEqual(@as(i12, -2048), signedField(i12, 0x80000000, 31, 20)); // most negative
-    // U-type imm at [31:12], i20: 0x80000000 → field 0x80000 → most negative i20
+    // a 20-bit signed immediate at [31:12]: 0x80000000 → field 0x80000 → most negative i20
     try testing.expectEqual(@as(i20, -524288), signedField(i20, 0x80000000, 31, 12));
 }
 test "setrange clears then writes, masks overflow" {
