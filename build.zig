@@ -17,6 +17,12 @@ pub fn build(b: *std.Build) void {
     });
     virtual_devices.addImport("bits", bits);
 
+    // Flattened device tree (DTB) serializer. std-only, no device dependency.
+    const fdt = b.addModule("fdt", .{
+        .root_source_file = b.path("src/fdt/root.zig"),
+        .target = target,
+    });
+
     // Test step: run the bits tests and the virtual_devices root tests.
     const bits_tests = b.addTest(.{ .root_module = bits });
     const run_bits_tests = b.addRunArtifact(bits_tests);
@@ -30,7 +36,11 @@ pub fn build(b: *std.Build) void {
     const devices_tests = b.addTest(.{ .root_module = devices_test_mod });
     const run_devices_tests = b.addRunArtifact(devices_tests);
 
+    const fdt_tests = b.addTest(.{ .root_module = fdt });
+    const run_fdt_tests = b.addRunArtifact(fdt_tests);
+
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&run_bits_tests.step);
     test_step.dependOn(&run_devices_tests.step);
+    test_step.dependOn(&run_fdt_tests.step);
 }
