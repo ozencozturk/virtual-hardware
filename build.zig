@@ -29,6 +29,12 @@ pub fn build(b: *std.Build) void {
         .target = target,
     });
 
+    // The x86-64 architecture: registers, page tables, instruction decode.
+    const x86 = b.addModule("x86", .{
+        .root_source_file = b.path("src/x86/x86.zig"),
+        .target = target,
+    });
+
     // Linux boot-protocol structures, namespaced per architecture.
     const linux_boot = b.addModule("linux_boot", .{
         .root_source_file = b.path("src/linux_boot/linux_boot.zig"),
@@ -54,6 +60,9 @@ pub fn build(b: *std.Build) void {
     const acpi_tests = b.addTest(.{ .root_module = acpi });
     const run_acpi_tests = b.addRunArtifact(acpi_tests);
 
+    const x86_tests = b.addTest(.{ .root_module = x86 });
+    const run_x86_tests = b.addRunArtifact(x86_tests);
+
     const linux_boot_tests = b.addTest(.{ .root_module = linux_boot });
     const run_linux_boot_tests = b.addRunArtifact(linux_boot_tests);
 
@@ -62,5 +71,6 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_devices_tests.step);
     test_step.dependOn(&run_fdt_tests.step);
     test_step.dependOn(&run_acpi_tests.step);
+    test_step.dependOn(&run_x86_tests.step);
     test_step.dependOn(&run_linux_boot_tests.step);
 }

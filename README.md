@@ -13,7 +13,7 @@ hardware fault handler, or from a test.
 
 ## Modules
 
-The package exposes five modules:
+The package exposes six modules:
 
 | Module | Root | Contents |
 |---|---|---|
@@ -21,6 +21,7 @@ The package exposes five modules:
 | `virtual_devices` | `src/virtual_devices/virtual_devices.zig` | `Uart` (16550), `Virtio` (virtio-blk MMIO), `VirtioConsole` (virtio-console MMIO), plus per-architecture namespaces: `riscv.Plic`/`riscv.Clint` and `x86.AcpiPm`/`x86.Ioapic`/`x86.Lapic`. Imports `bits`. |
 | `acpi` | `src/acpi/acpi.zig` | Serializes a declarative machine description into ACPI tables: RSDP, RSDT, FADT, MADT and a DSDT encoded from device descriptors. std-only. |
 | `fdt` | `src/fdt/fdt.zig` | Flattened device tree (DTB) serializer. std-only. |
+| `x86` | `src/x86/x86.zig` | The x86-64 architecture: `registers` (control, model-specific and CPUID bitfields), `paging` (build and walk 4-level page tables over a guest RAM slice), `mmio_decode` (the MOV behind a memory-mapped access). std-only. |
 | `linux_boot` | `src/linux_boot/linux_boot.zig` | Linux image headers and boot-protocol structures, namespaced per architecture. |
 
 ## Usage
