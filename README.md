@@ -18,7 +18,7 @@ The package exposes six modules:
 | Module | Root | Contents |
 |---|---|---|
 | `bits` | `src/bits/bits.zig` | Bit-field extract/insert, mask building, alignment and bounds predicates, little-endian readers. |
-| `virtual_devices` | `src/virtual_devices/virtual_devices.zig` | `Uart` (16550), `Virtio` (virtio-blk MMIO), `VirtioConsole` (virtio-console MMIO), plus per-architecture namespaces: `riscv.Plic`/`riscv.Clint` and `x86.AcpiPm`/`x86.Ioapic`/`x86.Lapic`. Imports `bits`. |
+| `virtual_devices` | `src/virtual_devices/virtual_devices.zig` | `Uart` (16550); the virtio-mmio devices `VirtioBlk`, `VirtioNet`, `VirtioConsole`, `VirtioVsock`, `VirtioRng` and `VirtioBalloon`, all over the shared `virtio_mmio` transport, `virtqueue` mechanics and `packet_fifo`; per-architecture namespaces `riscv.Plic`/`riscv.Clint` and `x86.AcpiPm`/`x86.Ioapic`/`x86.Lapic`. Imports `bits`. |
 | `acpi` | `src/acpi/acpi.zig` | Serializes a declarative machine description into ACPI tables: RSDP, RSDT, FADT, MADT and a DSDT encoded from device descriptors. std-only. |
 | `fdt` | `src/fdt/fdt.zig` | Flattened device tree (DTB) serializer. std-only. |
 | `x86` | `src/x86/x86.zig` | The x86-64 architecture: `registers` (control, model-specific and CPUID bitfields), `paging` (build and walk 4-level page tables over a guest RAM slice), `mmio_decode` (the MOV behind a memory-mapped access). std-only. |
@@ -50,12 +50,23 @@ const devices = @import("virtual_devices");
 var uart: devices.Uart = .{};
 try uart.store(devices.Uart.THR_DLL, 1, 'H'); // width is a runtime argument
 
-const disk: devices.Virtio = .{};
-_ = disk;
+// A store answers what the device must do next: a queue to serve, or a reset.
+var disk: devices.VirtioBlk = .{ .disk = image };
+switch (try disk.store(0x050, 4, 0)) {
+    .notify => |q| disk.service(q, .{ .memory = ram, .base = 0 }),
+    else => {},
+}
 
 // The console performs no I/O itself; the owner supplies the sink.
 const console: devices.VirtioConsole = .{};
 _ = console;
+
+// Entropy as a function of a seed and a position, both device state.
+var rng: devices.VirtioRng = .{};
+rng.reseed(1);
+
+// Writes reach the image on a flush; a cut keeps only what one claimed.
+disk.powerCut(0);
 
 // The PM1 block a guest's ACPI implementation needs to start its interpreter.
 var pm: devices.x86.AcpiPm = .{};
