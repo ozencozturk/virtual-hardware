@@ -13,29 +13,10 @@ const packet_fifo = @import("packet_fifo.zig");
 
 pub const Guest = virtqueue.Guest;
 
-/// Context id every guest reserves for the host it is running on.
-pub const HOST_CID: u64 = 2;
-
 /// `struct virtio_vsock_config`.
 const Config = extern struct {
     /// Which guest this is, as both ends address it.
     guest_cid: u64 = 3,
-};
-
-/// `struct virtio_vsock_hdr`, in front of every packet in either direction.
-pub const PacketHeader = extern struct {
-    src_cid: u64 = 0,
-    dst_cid: u64 = 0,
-    src_port: u32 = 0,
-    dst_port: u32 = 0,
-    len: u32 = 0,
-    type: u16 = 0,
-    op: u16 = 0,
-    flags: u32 = 0,
-    buf_alloc: u32 = 0,
-    fwd_cnt: u32 = 0,
-
-    pub const BYTES = 44;
 };
 
 /// Queue indices fixed by the spec.
@@ -46,9 +27,6 @@ const NUM_QUEUES = 3;
 
 /// Ring depth offered to the driver. Power of two, as the spec requires.
 pub const QUEUE_SIZE: u32 = 64;
-
-/// Longest packet carried, header included.
-pub const MAX_PACKET = PacketHeader.BYTES + 4096;
 
 /// Packets each direction holds before it drops. An owner that takes what it is
 /// given whenever the guest exits never fills them.
@@ -61,6 +39,28 @@ pub const EVENT_TRANSPORT_RESET: u32 = 0;
 
 pub const VirtioVsock = struct {
     pub const MMIO_SIZE = mmio.MMIO_SIZE;
+
+    /// Context id every guest reserves for the host it is running on.
+    pub const HOST_CID: u64 = 2;
+
+    /// `struct virtio_vsock_hdr`, in front of every packet in either direction.
+    pub const PacketHeader = extern struct {
+        src_cid: u64 = 0,
+        dst_cid: u64 = 0,
+        src_port: u32 = 0,
+        dst_port: u32 = 0,
+        len: u32 = 0,
+        type: u16 = 0,
+        op: u16 = 0,
+        flags: u32 = 0,
+        buf_alloc: u32 = 0,
+        fwd_cnt: u32 = 0,
+
+        pub const BYTES = 44;
+    };
+
+    /// Longest packet carried, header included.
+    pub const MAX_PACKET = PacketHeader.BYTES + 4096;
 
     const Transport = mmio.Transport(.{
         .device_id = 19,
@@ -299,16 +299,16 @@ fn postOne(g: Guest, desc: u64, avail: u64, addr: u64, len: u32, write: bool) vo
 
 /// A packet with a header naming its ports and a payload after it.
 fn packetOf(buf: []u8, src_port: u32, dst_port: u32, payload: []const u8) []u8 {
-    const h = PacketHeader{
+    const h = VirtioVsock.PacketHeader{
         .src_cid = 3,
-        .dst_cid = HOST_CID,
+        .dst_cid = VirtioVsock.HOST_CID,
         .src_port = src_port,
         .dst_port = dst_port,
         .len = @intCast(payload.len),
     };
-    @memcpy(buf[0..PacketHeader.BYTES], std.mem.asBytes(&h)[0..PacketHeader.BYTES]);
-    @memcpy(buf[PacketHeader.BYTES..][0..payload.len], payload);
-    return buf[0 .. PacketHeader.BYTES + payload.len];
+    @memcpy(buf[0..VirtioVsock.PacketHeader.BYTES], std.mem.asBytes(&h)[0..VirtioVsock.PacketHeader.BYTES]);
+    @memcpy(buf[VirtioVsock.PacketHeader.BYTES..][0..payload.len], payload);
+    return buf[0 .. VirtioVsock.PacketHeader.BYTES + payload.len];
 }
 
 test "vsock: identifies as a modern virtio socket device" {
@@ -345,14 +345,14 @@ test "vsock: a pushed packet fills a posted buffer whole" {
     try bringUp(&v, RX_QUEUE, 4, RX_DESC, RX_AVAIL, RX_USED);
     try driverUp(&v);
 
-    var buf: [MAX_PACKET]u8 = undefined;
+    var buf: [VirtioVsock.MAX_PACKET]u8 = undefined;
     const packet = packetOf(&buf, 1024, 5000, "hello");
     try testing.expect(v.pushPacket(packet));
     postOne(g, RX_DESC, RX_AVAIL, 0xa000, 256, true);
     v.service(RX_QUEUE, g);
 
-    try testing.expectEqualStrings("hello", ram[0xa000 + PacketHeader.BYTES ..][0..5]);
-    const got = VirtioVsock.headerOf(ram[0xa000..][0..PacketHeader.BYTES]).?;
+    try testing.expectEqualStrings("hello", ram[0xa000 + VirtioVsock.PacketHeader.BYTES ..][0..5]);
+    const got = VirtioVsock.headerOf(ram[0xa000..][0..VirtioVsock.PacketHeader.BYTES]).?;
     try testing.expectEqual(@as(u32, 5000), got.dst_port);
     try testing.expectEqual(@as(u64, 1), v.packets_in);
     try testing.expectEqual(@as(?u32, @intCast(packet.len)), g.read(u32, RX_USED + 8));
@@ -366,7 +366,7 @@ test "vsock: a packet arriving before the driver is up waits" {
 
     var v = VirtioVsock{};
     try bringUp(&v, RX_QUEUE, 4, RX_DESC, RX_AVAIL, RX_USED);
-    var buf: [MAX_PACKET]u8 = undefined;
+    var buf: [VirtioVsock.MAX_PACKET]u8 = undefined;
     try testing.expect(v.pushPacket(packetOf(&buf, 1, 2, "x")));
     postOne(g, RX_DESC, RX_AVAIL, 0xa000, 256, true);
 
@@ -387,7 +387,7 @@ test "vsock: a buffer too small for the packet completes empty and drops it" {
     var v = VirtioVsock{};
     try bringUp(&v, RX_QUEUE, 4, RX_DESC, RX_AVAIL, RX_USED);
     try driverUp(&v);
-    var buf: [MAX_PACKET]u8 = undefined;
+    var buf: [VirtioVsock.MAX_PACKET]u8 = undefined;
     try testing.expect(v.pushPacket(packetOf(&buf, 1, 2, "payload")));
     postOne(g, RX_DESC, RX_AVAIL, 0xa000, 8, true);
 
@@ -407,7 +407,7 @@ test "vsock: a transmitted chain becomes a packet the owner can take" {
     try bringUp(&v, TX_QUEUE, 4, TX_DESC, TX_AVAIL, TX_USED);
     try driverUp(&v);
 
-    var buf: [MAX_PACKET]u8 = undefined;
+    var buf: [VirtioVsock.MAX_PACKET]u8 = undefined;
     const packet = packetOf(&buf, 1024, 5000, "outbound");
     @memcpy(ram[0xa000..][0..packet.len], packet);
     postOne(g, TX_DESC, TX_AVAIL, 0xa000, @intCast(packet.len), false);
@@ -415,7 +415,7 @@ test "vsock: a transmitted chain becomes a packet the owner can take" {
     v.service(TX_QUEUE, g);
 
     const got = v.peekPacket().?;
-    try testing.expectEqualStrings("outbound", got[PacketHeader.BYTES..]);
+    try testing.expectEqualStrings("outbound", got[VirtioVsock.PacketHeader.BYTES..]);
     try testing.expectEqual(@as(u32, 1024), VirtioVsock.headerOf(got).?.src_port);
     try testing.expectEqual(@as(u64, 1), v.packets_out);
 
@@ -432,7 +432,7 @@ test "vsock: a chain too short to hold a header carries no packet" {
     var v = VirtioVsock{};
     try bringUp(&v, TX_QUEUE, 4, TX_DESC, TX_AVAIL, TX_USED);
     try driverUp(&v);
-    postOne(g, TX_DESC, TX_AVAIL, 0xa000, PacketHeader.BYTES - 1, false);
+    postOne(g, TX_DESC, TX_AVAIL, 0xa000, VirtioVsock.PacketHeader.BYTES - 1, false);
 
     v.service(TX_QUEUE, g);
     try testing.expectEqual(@as(?[]const u8, null), v.peekPacket());
@@ -490,7 +490,7 @@ test "vsock: a kick on a queue this device does not have serves nothing" {
     var v = VirtioVsock{};
     try bringUp(&v, RX_QUEUE, 4, RX_DESC, RX_AVAIL, RX_USED);
     try driverUp(&v);
-    var buf: [MAX_PACKET]u8 = undefined;
+    var buf: [VirtioVsock.MAX_PACKET]u8 = undefined;
     try testing.expect(v.pushPacket(packetOf(&buf, 1, 2, "x")));
     postOne(g, RX_DESC, RX_AVAIL, 0xa000, 256, true);
 
@@ -508,7 +508,7 @@ test "vsock: a reset clears the rings and keeps the address and the totals" {
     v.setGuestCid(9);
     try bringUp(&v, RX_QUEUE, 4, RX_DESC, RX_AVAIL, RX_USED);
     try driverUp(&v);
-    var buf: [MAX_PACKET]u8 = undefined;
+    var buf: [VirtioVsock.MAX_PACKET]u8 = undefined;
     try testing.expect(v.pushPacket(packetOf(&buf, 1, 2, "x")));
     postOne(g, RX_DESC, RX_AVAIL, 0xa000, 256, true);
     v.service(RX_QUEUE, g);
